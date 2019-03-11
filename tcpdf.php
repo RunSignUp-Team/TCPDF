@@ -175,6 +175,18 @@ class TCPDF {
 	protected $pages = array();
 
 	/**
+	 * Page cache file
+	 * @protected
+	 */
+	protected $pageCacheFile = null;
+
+	/**
+	 * Page cache index
+	 * @protected
+	 */
+	protected $pageCacheIndex = array();
+
+	/**
 	 * Current document state.
 	 * @protected
 	 */
@@ -7814,6 +7826,33 @@ class TCPDF {
 					unset($this->$val);
 				}
 			}
+		}
+		// Close page cache file
+		$this->_closePageCacheFile();
+	}
+
+	/**
+	 * Update page cache file
+	 *
+	 * @param int $memSizeInBytes Memory size to use in bytes
+	 */
+	public function usePageCacheFile($memSizeInBytes)
+	{
+		$this->pageCacheFile = fopen('php://temp/maxmemory:' . $memSizeInBytes, 'w+');
+		if ($this->pageCacheFile === false)
+			$this->pageCacheFile = null;
+	}
+
+	/**
+	 * Close page cache file
+	 */
+	private function _closePageCacheFile()
+	{
+		if ($this->pageCacheFile !== null)
+		{
+			fclose($this->pageCacheFile);
+			$this->pageCacheFile = null;
+			$this->pageCacheIndex = [];
 		}
 	}
 
@@ -20788,6 +20827,13 @@ Putting 1 is equivalent to putting 0 and calling Ln() just after. Default value:
 	 * @since 4.5.000 (2008-12-31)
 	 */
 	protected function setPageBuffer($page, $data, $append=false) {
+		// Populate from page cache
+		if ($this->pageCacheFile !== null && isset($this->pageCacheIndex[$page]))
+		{
+			fseek($this->pageCacheFile, $this->pageCacheIndex[$page][0], SEEK_SET);
+			$this->pages[$page] = fread($this->pageCacheFile, $this->pageCacheIndex[$page][1]);
+		}
+
 		if ($append) {
 			$this->pages[$page] .= $data;
 		} else {
@@ -20809,7 +20855,32 @@ Putting 1 is equivalent to putting 0 and calling Ln() just after. Default value:
 	 */
 	protected function getPageBuffer($page) {
 		if (isset($this->pages[$page])) {
+			// Write last page to cache
+			if ($this->pageCacheFile !== null)
+			{
+				$lastPage = $page - 1;
+				if ($lastPage > 1 && isset($this->pages[$lastPage]))
+				{
+					/* Note: It might be nice to defragment 
+					if (isset($this->pageCacheIndex[$page]))
+					{
+					}
+					*/
+
+					fseek($this->pageCacheFile, 0, SEEK_END);
+					$this->pageCacheIndex[$lastPage] = [ftell($this->pageCacheFile), strlen($this->pages[$lastPage])];
+					fwrite($this->pageCacheFile, $this->pages[$lastPage]);
+					unset($this->pages[$lastPage]);
+				}
+			}
+
 			return $this->pages[$page];
+		}
+		// Check page cache
+		else if ($this->pageCacheFile !== null && isset($this->pageCacheIndex[$page]))
+		{
+			fseek($this->pageCacheFile, $this->pageCacheIndex[$page][0], SEEK_SET);
+			return fread($this->pageCacheFile, $this->pageCacheIndex[$page][1]);
 		}
 		return false;
 	}
@@ -21092,7 +21163,8 @@ Putting 1 is equivalent to putting 0 and calling Ln() just after. Default value:
 			return false;
 		}
 		// delete current page
-		unset($this->pages[$page]);
+		if (isset($this->pages[$page]))
+			unset($this->pages[$page]);
 		unset($this->pagedim[$page]);
 		unset($this->pagelen[$page]);
 		unset($this->intmrk[$page]);
@@ -21173,7 +21245,8 @@ Putting 1 is equivalent to putting 0 and calling Ln() just after. Default value:
 				}
 			}
 			// remove last page
-			unset($this->pages[$this->numpages]);
+			if (isset($this->pages[$this->numpages]))
+				unset($this->pages[$this->numpages]);
 			unset($this->pagedim[$this->numpages]);
 			unset($this->pagelen[$this->numpages]);
 			unset($this->intmrk[$this->numpages]);
