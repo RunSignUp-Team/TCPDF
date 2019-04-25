@@ -6623,14 +6623,16 @@ class TCPDF {
 					}
 					// account for margin changes
 					if ((($this->y + $this->lasth) > $this->PageBreakTrigger) AND ($this->inPageBody())) {
-						$this->AcceptPageBreak();
-						if ($this->rtl) {
-							$this->x -= $margin['R'];
-						} else {
-							$this->x += $margin['L'];
+						if ($this->AcceptPageBreak())
+						{
+							if ($this->rtl) {
+								$this->x -= $margin['R'];
+							} else {
+								$this->x += $margin['L'];
+							}
+							$this->lMargin += $margin['L'];
+							$this->rMargin += $margin['R'];
 						}
-						$this->lMargin += $margin['L'];
-						$this->rMargin += $margin['R'];
 					}
 					$w = $this->getRemainingWidth();
 					$wmax = $w - $this->cell_padding['L'] - $this->cell_padding['R'];
