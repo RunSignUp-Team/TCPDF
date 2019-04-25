@@ -181,6 +181,12 @@ class TCPDF {
 	protected $pageCacheFile = null;
 
 	/**
+	 * Page cache file is readonly
+	 * @protected
+	 */
+	protected $roPageCacheFile = false;
+
+	/**
 	 * Page cache index
 	 * @protected
 	 */
@@ -7770,6 +7776,10 @@ class TCPDF {
 				array_map('unlink', $tmpfiles);
 			}
 		}
+
+		// Close page cache file
+		$this->_closePageCacheFile();
+
 		$preserve = array(
 			'file_id',
 			'internal_encoding',
@@ -7782,7 +7792,8 @@ class TCPDF {
 			'signature_max_length',
 			'byterange_string',
 			'tsa_timestamp',
-			'tsa_data'
+			'tsa_data',
+			'pageCacheFile'
 		);
 		foreach (array_keys(get_object_vars($this)) as $val) {
 			if ($destroyall OR !in_array($val, $preserve)) {
@@ -7791,9 +7802,10 @@ class TCPDF {
 				}
 			}
 		}
-		// Close page cache file
-		$this->_closePageCacheFile();
 	}
+
+	/** Page cache reference counts */
+	protected static $pageCacheRefCnts = [];
 
 	/**
 	 * Update page cache file
@@ -7805,6 +7817,8 @@ class TCPDF {
 		$this->pageCacheFile = fopen('php://temp/maxmemory:' . $memSizeInBytes, 'w+');
 		if ($this->pageCacheFile === false)
 			$this->pageCacheFile = null;
+		else
+			self::$pageCacheRefCnts[(int)$this->pageCacheFile] = 1;
 	}
 
 	/**
@@ -7814,9 +7828,22 @@ class TCPDF {
 	{
 		if ($this->pageCacheFile !== null)
 		{
-			fclose($this->pageCacheFile);
+			self::$pageCacheRefCnts[(int)$this->pageCacheFile]--;
+			if (self::$pageCacheRefCnts[(int)$this->pageCacheFile] == 0)
+				@fclose($this->pageCacheFile); // Suppress error since this might be the end of the PHP script
 			$this->pageCacheFile = null;
 			$this->pageCacheIndex = [];
+		}
+	}
+
+	/** Handle cloning */
+	public function __clone()
+	{
+		// Update ref count
+		if ($this->pageCacheFile !== null)
+		{
+			self::$pageCacheRefCnts[(int)$this->pageCacheFile]++;
+			$this->roPageCacheFile = true;
 		}
 	}
 
@@ -20808,6 +20835,25 @@ Putting 1 is equivalent to putting 0 and calling Ln() just after. Default value:
 					{
 					}
 					*/
+
+					// Duplicate file if needed
+					if ($this->roPageCacheFile)
+					{
+						$origPageCacheFile = $this->pageCacheFile;
+						self::$pageCacheRefCnts[(int)$this->pageCacheFile]--;
+						$this->pageCacheFile = fopen('php://temp', 'w+');
+						if ($this->pageCacheFile === false)
+							$this->pageCacheFile = null;
+						else
+						{
+							self::$pageCacheRefCnts[(int)$this->pageCacheFile] = 1;
+							// Copy data
+							fseek($origPageCacheFile, 0, SEEK_SET);
+							while (($copyContent = fread($origPageCacheFile, 8192)) != false)
+								fwrite($this->pageCacheFile, $copyContent);
+						}
+						$this->roPageCacheFile = false;
+					}
 
 					fseek($this->pageCacheFile, 0, SEEK_END);
 					$this->pageCacheIndex[$lastPage] = [ftell($this->pageCacheFile), strlen($this->pages[$lastPage])];
