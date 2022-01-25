@@ -88,6 +88,7 @@ echo '<'.'?'.'xml version="1.0" encoding="UTF-8"'.'?'.'>';
 <li>Using WriteHTMLCell: [<a href="example_066.php" title="PDF [new window]" target="_blank">PDF</a>]</li>
 <li>Shorthand border styles including !important: [<a href="example_067.php" title="PDF [new window]" target="_blank">PDF</a>]</li>
 <li>PDF/A-3b with embedded file (Factur-X 1.07 - ZUGFeRD 2.3): [<a href="example_068.php" title="PDF [new window]" target="_blank">PDF</a>]</li>
+<li>Using page cache to reduce memory usage: [<a href="example_999.php" title="PDF [new window]" target="_blank">PDF</a>]</li>
 </ol>
 
 <h2>Barcodes</h2>
